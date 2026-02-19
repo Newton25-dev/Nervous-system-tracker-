@@ -75,7 +75,7 @@
     height: 240px;
     flex-shrink: 0;
     cursor: grab;
-    touch-action: none; /* critical: prevents scroll hijacking */
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
@@ -91,7 +91,6 @@
     background: linear-gradient(to bottom, var(--ventral), var(--sympathetic) 50%, var(--dorsal));
   }
 
-  /* Filled portion above the thumb */
   .slider-fill {
     position: absolute;
     left: 50%;
@@ -162,6 +161,38 @@
   .btn-log:hover { background:var(--ventral); }
   .btn-log:active { transform:scale(0.98); }
 
+  /* TIME PICKER */
+  .time-toggle {
+    display:flex; align-items:center; gap:12px; margin-bottom:20px;
+  }
+  .time-toggle-label {
+    font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:0.15em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  .toggle-switch {
+    position:relative; width:36px; height:20px; background:var(--border);
+    border-radius:10px; cursor:pointer; transition:background 0.3s;
+    border:1px solid var(--border); flex-shrink:0;
+  }
+  .toggle-switch.active { background:var(--ventral); border-color:var(--ventral); }
+  .toggle-knob {
+    position:absolute; top:2px; left:2px; width:14px; height:14px;
+    border-radius:50%; background:var(--surface); transition:left 0.2s;
+    box-shadow:0 1px 4px rgba(0,0,0,0.15);
+  }
+  .toggle-switch.active .toggle-knob { left:18px; }
+  .custom-time-inputs {
+    display:none; gap:10px; margin-bottom:20px; flex-wrap:wrap;
+  }
+  .custom-time-inputs.visible { display:flex; }
+  .custom-time-inputs input {
+    flex:1; min-width:120px; padding:10px 12px; background:var(--bg);
+    border:1px solid var(--border); border-radius:2px;
+    font-family:'DM Mono',monospace; font-size:0.72rem; color:var(--text);
+    outline:none; transition:border-color 0.3s;
+  }
+  .custom-time-inputs input:focus { border-color:var(--ventral); }
+
   /* GRAPH */
   .graph-panel { display:flex; flex-direction:column; }
   .graph-box   { flex:1; position:relative; min-height:280px; }
@@ -179,7 +210,7 @@
     border-radius:2px; padding:32px; box-shadow:0 2px 24px rgba(42,36,32,0.06);
   }
   .entry-item {
-    display:grid; grid-template-columns:80px 140px 1fr; gap:20px;
+    display:grid; grid-template-columns:120px 140px 1fr; gap:20px;
     align-items:start; padding:14px 0; border-bottom:1px solid var(--border);
     animation:fadeUp 0.35s ease;
   }
@@ -233,7 +264,6 @@
     </div>
 
     <div class="slider-row">
-      <!-- Custom draggable slider -->
       <div class="custom-slider" id="customSlider">
         <div class="slider-track"></div>
         <div class="slider-fill" id="sliderFill"></div>
@@ -255,6 +285,18 @@
 
     <label class="field-label" for="journalText">What's present right now?</label>
     <textarea id="journalText" placeholder="Notice what's happening in your body, thoughts, surroundings…"></textarea>
+
+    <div class="time-toggle">
+      <span class="time-toggle-label">Log for a different time?</span>
+      <div class="toggle-switch" id="timeToggle" onclick="toggleCustomTime()">
+        <div class="toggle-knob"></div>
+      </div>
+    </div>
+    <div class="custom-time-inputs" id="customTimeInputs">
+      <input type="date" id="customDate">
+      <input type="time" id="customTime">
+    </div>
+
     <button class="btn-log" onclick="submitEntry()">Log Entry</button>
   </div>
 
@@ -294,7 +336,7 @@
     dorsal:      { name:'Dorsal Vagal',  sub:'Disconnected · Shut down · Gone', color:'#6b7fa3' },
   };
 
-  let currentVal = 100; // 0 = dorsal (bottom), 100 = ventral (top)
+  let currentVal = 100;
   let entries = [];
   try { entries = JSON.parse(localStorage.getItem('ns_entries') || '[]'); } catch(e) { entries = []; }
 
@@ -312,27 +354,72 @@
   const listEl      = document.getElementById('entriesList');
   const toastEl     = document.getElementById('toast');
 
+  // ─── SERVER SYNC ─────────────────────────────────────────────
+  // Load entries from server so logs are shared across devices
+  async function loadFromServer() {
+    try {
+      const res = await fetch('/api/entries');
+      if (res.ok) {
+        const serverEntries = await res.json();
+        if (Array.isArray(serverEntries) && serverEntries.length > 0) {
+          entries = serverEntries;
+          localStorage.setItem('ns_entries', JSON.stringify(entries));
+          renderGraph();
+          renderLog();
+        }
+      }
+    } catch(e) { /* offline – use local cache */ }
+  }
+  loadFromServer();
+
+  async function saveToServer() {
+    try {
+      await fetch('/api/entries', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entries),
+      });
+    } catch(e) { /* offline – local cache still saved */ }
+  }
+
+  // ─── TIME TOGGLE ─────────────────────────────────────────────
+  let useCustomTime = false;
+  const timeToggleEl    = document.getElementById('timeToggle');
+  const customTimeWrap  = document.getElementById('customTimeInputs');
+  const customDateInput = document.getElementById('customDate');
+  const customTimeInput = document.getElementById('customTime');
+
+  function toggleCustomTime() {
+    useCustomTime = !useCustomTime;
+    timeToggleEl.classList.toggle('active', useCustomTime);
+    customTimeWrap.classList.toggle('visible', useCustomTime);
+    if (useCustomTime) {
+      const now = new Date();
+      customDateInput.value = now.toISOString().split('T')[0];
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      customTimeInput.value = hh + ':' + mm;
+    }
+  }
+
   // ─── HELPERS ─────────────────────────────────────────────────
   function stateFor(v)  { return v > 60 ? STATES.ventral : v > 30 ? STATES.sympathetic : STATES.dorsal; }
   function zoneFor(v)   { return v > 60 ? 'zone-v' : v > 30 ? 'zone-s' : 'zone-d'; }
-  function persist()    { localStorage.setItem('ns_entries', JSON.stringify(entries)); }
+  function persist()    {
+    localStorage.setItem('ns_entries', JSON.stringify(entries));
+    saveToServer();
+  }
   function showToast(msg) {
     toastEl.textContent = msg;
     toastEl.classList.add('show');
     setTimeout(() => toastEl.classList.remove('show'), 2400);
   }
 
-  // ─── CUSTOM SLIDER LOGIC ──────────────────────────────────────
-  const TRACK_H = 240; // must match CSS height
+  // ─── CUSTOM SLIDER LOGIC ─────────────────────────────────────
+  const TRACK_H = 240;
 
-  function valToY(val) {
-    // val 100 → top (y=0), val 0 → bottom (y=TRACK_H)
-    return TRACK_H * (1 - val / 100);
-  }
-
-  function yToVal(y) {
-    return Math.round(Math.max(0, Math.min(100, (1 - y / TRACK_H) * 100)));
-  }
+  function valToY(val) { return TRACK_H * (1 - val / 100); }
+  function yToVal(y)   { return Math.round(Math.max(0, Math.min(100, (1 - y / TRACK_H) * 100))); }
 
   function updateSliderVisual(val) {
     const y = valToY(val);
@@ -351,16 +438,12 @@
     document.getElementById(zoneFor(val)).classList.add('active');
   }
 
-  // Init
   updateSliderVisual(100);
 
-  // Drag state
   let dragging = false;
   let sliderRect = null;
 
-  function getClientY(e) {
-    return e.touches ? e.touches[0].clientY : e.clientY;
-  }
+  function getClientY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
 
   function onDragStart(e) {
     e.preventDefault();
@@ -386,29 +469,39 @@
     sliderEl.classList.remove('dragging');
   }
 
-  // Mouse events
   sliderEl.addEventListener('mousedown',  onDragStart, { passive: false });
   window.addEventListener('mousemove',    onDragMove,  { passive: false });
   window.addEventListener('mouseup',      onDragEnd);
-
-  // Touch events
   sliderEl.addEventListener('touchstart', onDragStart, { passive: false });
   window.addEventListener('touchmove',    onDragMove,  { passive: false });
   window.addEventListener('touchend',     onDragEnd);
 
   // ─── SUBMIT ──────────────────────────────────────────────────
   function submitEntry() {
-    const s   = stateFor(currentVal);
-    const now = new Date();
+    const s = stateFor(currentVal);
+    let entryDate;
+    if (useCustomTime && customDateInput.value && customTimeInput.value) {
+      entryDate = new Date(customDateInput.value + 'T' + customTimeInput.value);
+    } else {
+      entryDate = new Date();
+    }
     entries.push({
       val:   currentVal,
       note:  document.getElementById('journalText').value.trim(),
       state: s.name,
       color: s.color,
-      time:  now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+      time:  entryDate.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+      date:  entryDate.toLocaleDateString([], { month:'short', day:'numeric' }),
+      ts:    entryDate.getTime(),
     });
+    // Sort entries chronologically
+    entries.sort((a, b) => (a.ts || 0) - (b.ts || 0));
     persist();
     document.getElementById('journalText').value = '';
+
+    // Reset custom time toggle
+    if (useCustomTime) toggleCustomTime();
+
     renderGraph();
     renderLog();
     showToast('Entry logged');
@@ -420,21 +513,17 @@
 
     entries = [];
     localStorage.removeItem('ns_entries');
+    saveToServer();
 
-    // Reset slider
     currentVal = 100;
     updateSliderVisual(100);
-
-    // Clear journal
     document.getElementById('journalText').value = '';
 
-    // Wipe canvas
     canvas.width  = 1;
     canvas.height = 1;
     ctx.clearRect(0, 0, 1, 1);
     emptyHint.style.display = 'flex';
 
-    // Hide log
     logSection.style.display = 'none';
     listEl.innerHTML = '';
 
@@ -445,13 +534,17 @@
   function renderLog() {
     if (entries.length === 0) { logSection.style.display = 'none'; listEl.innerHTML = ''; return; }
     logSection.style.display = 'block';
-    listEl.innerHTML = [...entries].reverse().map(e => `
+    const today = new Date().toLocaleDateString([], { month:'short', day:'numeric' });
+    listEl.innerHTML = [...entries].reverse().map(e => {
+      const dateLabel = e.date && e.date !== today ? e.date + ' · ' : '';
+      return `
       <div class="entry-item">
-        <div class="e-time">${e.time}</div>
+        <div class="e-time">${dateLabel}${e.time}</div>
         <div class="e-state" style="color:${e.color}">${e.state}</div>
         <div class="e-note">${e.note || '<span style="opacity:0.35;font-style:italic">No note</span>'}</div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   // ─── RENDER GRAPH ────────────────────────────────────────────
@@ -474,7 +567,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    const pad = { top:28, right:16, bottom:50, left:16 };
+    const pad = { top:28, right:16, bottom:62, left:16 };
     const gW  = W - pad.left - pad.right;
     const gH  = H - pad.top  - pad.bottom;
 
@@ -550,7 +643,13 @@
       ctx.font = '300 9px "DM Mono",monospace';
       ctx.fillStyle = '#7a6e68';
       ctx.textAlign = 'center';
-      ctx.fillText(e.time, x, pad.top+gH+16);
+      const today = new Date().toLocaleDateString([], { month:'short', day:'numeric' });
+      const timeLabel = (e.date && e.date !== today) ? e.date + '\n' + e.time : e.time;
+      // Draw multiline label (date + time for non-today entries)
+      const labelParts = timeLabel.split('\n');
+      labelParts.forEach((part, li) => {
+        ctx.fillText(part, x, pad.top+gH+16 + li*12);
+      });
 
       if (e.note) {
         const s = e.note.length > 18 ? e.note.slice(0,16)+'…' : e.note;
