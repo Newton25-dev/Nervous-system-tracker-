@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Nervous System Log</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ventral: #4a9e8f;
+    --sympathetic: #c97d4e;
+    --dorsal: #6b7fa3;
+    --bg: #f5f0e8;
+    --surface: #fffdf8;
+    --text: #2a2420;
+    --muted: #7a6e68;
+    --border: rgba(42,36,32,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(74,158,143,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(107,127,163,0.06) 0%, transparent 60%);
+    touch-action: pan-x pan-y;
+  }
+
+  header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: clamp(2rem,4vw,3rem); font-weight: 300; letter-spacing: 0.08em; }
+  header p  { font-family:'DM Mono',monospace; font-size:0.7rem; color:var(--muted); letter-spacing:0.18em; text-transform:uppercase; margin-top:8px; }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+  @media (max-width: 720px) { .container { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 36px 32px;
+    box-shadow: 0 2px 24px rgba(42,36,32,0.06);
+  }
+  .panel-label {
+    font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:0.22em;
+    text-transform:uppercase; color:var(--muted); margin-bottom:28px; display:block;
+  }
+
+  /* STATE HEADER */
+  .state-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+  .state-name   { font-size:1.4rem; font-style:italic; font-weight:300; transition:color 0.3s; color:var(--ventral); }
+  .state-sub    { font-family:'DM Mono',monospace; font-size:0.6rem; color:var(--muted); margin-top:4px; }
+  .val-chip     { font-family:'DM Mono',monospace; font-size:0.62rem; background:var(--text); color:var(--bg); padding:4px 9px; border-radius:2px; align-self:center; }
+
+  /* CUSTOM SLIDER */
+  .slider-row { display:flex; align-items:center; gap:28px; margin-bottom:28px; }
+
+  .custom-slider {
+    position: relative;
+    width: 40px;
+    height: 240px;
+    flex-shrink: 0;
+    cursor: grab;
+    touch-action: none; /* critical: prevents scroll hijacking */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .custom-slider:active { cursor: grabbing; }
+
+  .slider-track {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(to bottom, var(--ventral), var(--sympathetic) 50%, var(--dorsal));
+  }
+
+  /* Filled portion above the thumb */
+  .slider-fill {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    border-radius: 3px 3px 0 0;
+    top: 0;
+    background: var(--ventral);
+    transition: background 0.3s;
+    pointer-events: none;
+  }
+
+  .slider-thumb {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 3px solid var(--ventral);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    transition: border-color 0.3s, transform 0.15s;
+    pointer-events: none;
+  }
+  .custom-slider.dragging .slider-thumb {
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+
+  /* Zone labels beside slider */
+  .zone-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 240px;
+    padding: 0;
+  }
+  .zone-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family:'DM Mono',monospace;
+    font-size:0.62rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    opacity: 0.4;
+    transition: opacity 0.3s;
+  }
+  .zone-label.active { opacity: 1; font-weight: 500; }
+  .zone-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+  /* JOURNAL */
+  .field-label { font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:10px; }
+  textarea {
+    width:100%; height:96px; background:var(--bg); border:1px solid var(--border);
+    border-radius:2px; padding:14px 16px; font-family:'Cormorant Garamond',serif;
+    font-size:1rem; color:var(--text); resize:none; outline:none;
+    transition:border-color 0.3s; line-height:1.6; margin-bottom:20px;
+  }
+  textarea:focus { border-color:var(--ventral); }
+  textarea::placeholder { color:var(--muted); font-style:italic; }
+
+  .btn-log {
+    width:100%; padding:14px; background:var(--text); color:var(--bg); border:none;
+    border-radius:2px; font-family:'DM Mono',monospace; font-size:0.7rem; letter-spacing:0.2em;
+    text-transform:uppercase; cursor:pointer; transition:background 0.3s,transform 0.15s;
+  }
+  .btn-log:hover { background:var(--ventral); }
+  .btn-log:active { transform:scale(0.98); }
+
+  /* GRAPH */
+  .graph-panel { display:flex; flex-direction:column; }
+  .graph-box   { flex:1; position:relative; min-height:280px; }
+  canvas       { display:block; width:100% !important; height:100% !important; }
+  .empty-hint  {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px; opacity:0.35; pointer-events:none;
+  }
+  .empty-hint svg { width:36px; height:36px; stroke:var(--muted); }
+  .empty-hint p { font-family:'DM Mono',monospace; font-size:0.62rem; letter-spacing:0.16em; text-transform:uppercase; color:var(--muted); }
+
+  /* LOG */
+  .log-section {
+    grid-column:1/-1; background:var(--surface); border:1px solid var(--border);
+    border-radius:2px; padding:32px; box-shadow:0 2px 24px rgba(42,36,32,0.06);
+  }
+  .entry-item {
+    display:grid; grid-template-columns:80px 140px 1fr; gap:20px;
+    align-items:start; padding:14px 0; border-bottom:1px solid var(--border);
+    animation:fadeUp 0.35s ease;
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+  .e-time  { font-family:'DM Mono',monospace; font-size:0.68rem; color:var(--muted); padding-top:2px; }
+  .e-state { font-size:0.9rem; font-style:italic; }
+  .e-note  { font-size:0.95rem; color:var(--muted); line-height:1.55; }
+
+  /* CLEAR BUTTON */
+  .clear-zone { max-width:960px; margin:8px auto 72px; padding:0 24px; display:flex; justify-content:center; }
+  .btn-clear  {
+    padding:13px 48px; background:transparent; color:#c0392b;
+    border:1.5px solid rgba(192,57,43,0.38); border-radius:2px;
+    font-family:'DM Mono',monospace; font-size:0.68rem; letter-spacing:0.2em;
+    text-transform:uppercase; cursor:pointer;
+    transition:background 0.25s,color 0.25s,border-color 0.25s,transform 0.15s;
+  }
+  .btn-clear:hover  { background:#c0392b; color:#fff; border-color:#c0392b; }
+  .btn-clear:active { transform:scale(0.97); }
+
+  /* TOAST */
+  .toast {
+    position:fixed; bottom:32px; left:50%;
+    transform:translateX(-50%) translateY(80px);
+    background:var(--text); color:var(--bg); padding:12px 26px; border-radius:2px;
+    font-family:'DM Mono',monospace; font-size:0.66rem; letter-spacing:0.14em;
+    text-transform:uppercase; transition:transform 0.3s ease; z-index:999; pointer-events:none;
+  }
+  .toast.show { transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Nervous System Log</h1>
+  <p>Polyvagal State Tracker</p>
+</header>
+
+<div class="container">
+
+  <!-- ENTRY PANEL -->
+  <div class="panel">
+    <span class="panel-label">New Entry</span>
+
+    <div class="state-header">
+      <div>
+        <div class="state-name" id="stateName">Ventral Vagal</div>
+        <div class="state-sub"  id="stateSub">Connected · Calm · Safe</div>
+      </div>
+      <div class="val-chip" id="valChip">100</div>
+    </div>
+
+    <div class="slider-row">
+      <!-- Custom draggable slider -->
+      <div class="custom-slider" id="customSlider">
+        <div class="slider-track"></div>
+        <div class="slider-fill" id="sliderFill"></div>
+        <div class="slider-thumb" id="sliderThumb"></div>
+      </div>
+
+      <div class="zone-labels">
+        <div class="zone-label active" id="zone-v">
+          <div class="zone-dot" style="background:var(--ventral)"></div>Ventral Vagal
+        </div>
+        <div class="zone-label" id="zone-s">
+          <div class="zone-dot" style="background:var(--sympathetic)"></div>Sympathetic
+        </div>
+        <div class="zone-label" id="zone-d">
+          <div class="zone-dot" style="background:var(--dorsal)"></div>Dorsal Vagal
+        </div>
+      </div>
+    </div>
+
+    <label class="field-label" for="journalText">What's present right now?</label>
+    <textarea id="journalText" placeholder="Notice what's happening in your body, thoughts, surroundings…"></textarea>
+    <button class="btn-log" onclick="submitEntry()">Log Entry</button>
+  </div>
+
+  <!-- GRAPH PANEL -->
+  <div class="panel graph-panel">
+    <span class="panel-label">Today's Arc</span>
+    <div class="graph-box" id="graphBox">
+      <div class="empty-hint" id="emptyHint">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <p>Log your first entry</p>
+      </div>
+      <canvas id="graphCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel log-section" id="logSection" style="display:none">
+    <span class="panel-label">Entry Log</span>
+    <div id="entriesList"></div>
+  </div>
+
+</div>
+
+<div class="clear-zone">
+  <button class="btn-clear" onclick="clearAll()">⊘ &nbsp; Clear All Entries</button>
+</div>
+
+<div class="toast" id="toast">Entry logged</div>
+
+<script>
+  // ─── STATES ──────────────────────────────────────────────────
+  const STATES = {
+    ventral:     { name:'Ventral Vagal', sub:'Connected · Calm · Safe',        color:'#4a9e8f' },
+    sympathetic: { name:'Sympathetic',   sub:'Activated · Agitated · Alert',    color:'#c97d4e' },
+    dorsal:      { name:'Dorsal Vagal',  sub:'Disconnected · Shut down · Gone', color:'#6b7fa3' },
+  };
+
+  let currentVal = 100; // 0 = dorsal (bottom), 100 = ventral (top)
+  let entries = [];
+  try { entries = JSON.parse(localStorage.getItem('ns_entries') || '[]'); } catch(e) { entries = []; }
+
+  // ─── ELEMENTS ────────────────────────────────────────────────
+  const stateNameEl = document.getElementById('stateName');
+  const stateSubEl  = document.getElementById('stateSub');
+  const valChipEl   = document.getElementById('valChip');
+  const sliderEl    = document.getElementById('customSlider');
+  const thumbEl     = document.getElementById('sliderThumb');
+  const fillEl      = document.getElementById('sliderFill');
+  const canvas      = document.getElementById('graphCanvas');
+  const ctx         = canvas.getContext('2d');
+  const emptyHint   = document.getElementById('emptyHint');
+  const logSection  = document.getElementById('logSection');
+  const listEl      = document.getElementById('entriesList');
+  const toastEl     = document.getElementById('toast');
+
+  // ─── HELPERS ─────────────────────────────────────────────────
+  function stateFor(v)  { return v > 60 ? STATES.ventral : v > 30 ? STATES.sympathetic : STATES.dorsal; }
+  function zoneFor(v)   { return v > 60 ? 'zone-v' : v > 30 ? 'zone-s' : 'zone-d'; }
+  function persist()    { localStorage.setItem('ns_entries', JSON.stringify(entries)); }
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2400);
+  }
+
+  // ─── CUSTOM SLIDER LOGIC ──────────────────────────────────────
+  const TRACK_H = 240; // must match CSS height
+
+  function valToY(val) {
+    // val 100 → top (y=0), val 0 → bottom (y=TRACK_H)
+    return TRACK_H * (1 - val / 100);
+  }
+
+  function yToVal(y) {
+    return Math.round(Math.max(0, Math.min(100, (1 - y / TRACK_H) * 100)));
+  }
+
+  function updateSliderVisual(val) {
+    const y = valToY(val);
+    thumbEl.style.top = y + 'px';
+    fillEl.style.height = y + 'px';
+
+    const s = stateFor(val);
+    thumbEl.style.borderColor = s.color;
+    fillEl.style.background   = s.color;
+    stateNameEl.textContent   = s.name;
+    stateNameEl.style.color   = s.color;
+    stateSubEl.textContent    = s.sub;
+    valChipEl.textContent     = val;
+
+    ['zone-v','zone-s','zone-d'].forEach(id => document.getElementById(id).classList.remove('active'));
+    document.getElementById(zoneFor(val)).classList.add('active');
+  }
+
+  // Init
+  updateSliderVisual(100);
+
+  // Drag state
+  let dragging = false;
+  let sliderRect = null;
+
+  function getClientY(e) {
+    return e.touches ? e.touches[0].clientY : e.clientY;
+  }
+
+  function onDragStart(e) {
+    e.preventDefault();
+    dragging = true;
+    sliderRect = sliderEl.getBoundingClientRect();
+    sliderEl.classList.add('dragging');
+    onDragMove(e);
+  }
+
+  function onDragMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const clientY = getClientY(e);
+    const relY = clientY - sliderRect.top;
+    const clamped = Math.max(0, Math.min(TRACK_H, relY));
+    currentVal = yToVal(clamped);
+    updateSliderVisual(currentVal);
+  }
+
+  function onDragEnd(e) {
+    if (!dragging) return;
+    dragging = false;
+    sliderEl.classList.remove('dragging');
+  }
+
+  // Mouse events
+  sliderEl.addEventListener('mousedown',  onDragStart, { passive: false });
+  window.addEventListener('mousemove',    onDragMove,  { passive: false });
+  window.addEventListener('mouseup',      onDragEnd);
+
+  // Touch events
+  sliderEl.addEventListener('touchstart', onDragStart, { passive: false });
+  window.addEventListener('touchmove',    onDragMove,  { passive: false });
+  window.addEventListener('touchend',     onDragEnd);
+
+  // ─── SUBMIT ──────────────────────────────────────────────────
+  function submitEntry() {
+    const s   = stateFor(currentVal);
+    const now = new Date();
+    entries.push({
+      val:   currentVal,
+      note:  document.getElementById('journalText').value.trim(),
+      state: s.name,
+      color: s.color,
+      time:  now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+    });
+    persist();
+    document.getElementById('journalText').value = '';
+    renderGraph();
+    renderLog();
+    showToast('Entry logged');
+  }
+
+  // ─── CLEAR ALL ───────────────────────────────────────────────
+  function clearAll() {
+    if (!confirm('Clear every entry and reset the tracker?\nThis cannot be undone.')) return;
+
+    entries = [];
+    localStorage.removeItem('ns_entries');
+
+    // Reset slider
+    currentVal = 100;
+    updateSliderVisual(100);
+
+    // Clear journal
+    document.getElementById('journalText').value = '';
+
+    // Wipe canvas
+    canvas.width  = 1;
+    canvas.height = 1;
+    ctx.clearRect(0, 0, 1, 1);
+    emptyHint.style.display = 'flex';
+
+    // Hide log
+    logSection.style.display = 'none';
+    listEl.innerHTML = '';
+
+    showToast('All entries cleared');
+  }
+
+  // ─── RENDER LOG ──────────────────────────────────────────────
+  function renderLog() {
+    if (entries.length === 0) { logSection.style.display = 'none'; listEl.innerHTML = ''; return; }
+    logSection.style.display = 'block';
+    listEl.innerHTML = [...entries].reverse().map(e => `
+      <div class="entry-item">
+        <div class="e-time">${e.time}</div>
+        <div class="e-state" style="color:${e.color}">${e.state}</div>
+        <div class="e-note">${e.note || '<span style="opacity:0.35;font-style:italic">No note</span>'}</div>
+      </div>
+    `).join('');
+  }
+
+  // ─── RENDER GRAPH ────────────────────────────────────────────
+  function renderGraph() {
+    if (entries.length === 0) {
+      emptyHint.style.display = 'flex';
+      canvas.width  = 1;
+      canvas.height = 1;
+      return;
+    }
+    emptyHint.style.display = 'none';
+
+    const dpr  = window.devicePixelRatio || 1;
+    const box  = canvas.parentElement.getBoundingClientRect();
+    const W    = box.width;
+    const H    = Math.max(box.height, 280);
+
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const pad = { top:28, right:16, bottom:50, left:16 };
+    const gW  = W - pad.left - pad.right;
+    const gH  = H - pad.top  - pad.bottom;
+
+    [
+      { label:'Ventral',     pct:0,   color:'#4a9e8f' },
+      { label:'Sympathetic', pct:0.5, color:'#c97d4e' },
+      { label:'Dorsal',      pct:1,   color:'#6b7fa3' },
+    ].forEach(g => {
+      const yPx = pad.top + g.pct * gH;
+      ctx.beginPath();
+      ctx.setLineDash([4,6]);
+      ctx.strokeStyle = g.color + '30';
+      ctx.lineWidth = 1;
+      ctx.moveTo(pad.left, yPx);
+      ctx.lineTo(W - pad.right, yPx);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '300 10px "DM Mono",monospace';
+      ctx.fillStyle = g.color + 'aa';
+      ctx.textAlign = 'left';
+      ctx.fillText(g.label, pad.left, yPx - 5);
+    });
+
+    const toY = v => pad.top + (1 - v / 100) * gH;
+    const toX = i => entries.length === 1
+      ? pad.left + gW / 2
+      : pad.left + (i / (entries.length - 1)) * gW;
+
+    if (entries.length > 1) {
+      const fill = ctx.createLinearGradient(0, pad.top, 0, pad.top + gH);
+      fill.addColorStop(0,   'rgba(74,158,143,0.13)');
+      fill.addColorStop(0.5, 'rgba(201,125,78,0.07)');
+      fill.addColorStop(1,   'rgba(107,127,163,0.04)');
+      ctx.beginPath();
+      ctx.moveTo(toX(0), toY(entries[0].val));
+      entries.forEach((e, i) => {
+        if (!i) return;
+        const mx = (toX(i-1)+toX(i))/2;
+        ctx.bezierCurveTo(mx, toY(entries[i-1].val), mx, toY(e.val), toX(i), toY(e.val));
+      });
+      ctx.lineTo(toX(entries.length-1), pad.top+gH);
+      ctx.lineTo(toX(0), pad.top+gH);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    entries.forEach((e, i) => {
+      if (!i) { ctx.moveTo(toX(0), toY(e.val)); return; }
+      const mx = (toX(i-1)+toX(i))/2;
+      ctx.bezierCurveTo(mx, toY(entries[i-1].val), mx, toY(e.val), toX(i), toY(e.val));
+    });
+    const lg = ctx.createLinearGradient(0, pad.top, 0, pad.top+gH);
+    lg.addColorStop(0,   '#4a9e8f');
+    lg.addColorStop(0.5, '#c97d4e');
+    lg.addColorStop(1,   '#6b7fa3');
+    ctx.strokeStyle = lg;
+    ctx.stroke();
+
+    entries.forEach((e, i) => {
+      const x = toX(i), y = toY(e.val);
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI*2);
+      ctx.fillStyle = e.color;
+      ctx.fill();
+      ctx.strokeStyle = '#fffdf8';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = '300 9px "DM Mono",monospace';
+      ctx.fillStyle = '#7a6e68';
+      ctx.textAlign = 'center';
+      ctx.fillText(e.time, x, pad.top+gH+16);
+
+      if (e.note) {
+        const s = e.note.length > 18 ? e.note.slice(0,16)+'…' : e.note;
+        ctx.font = '300 8.5px "Cormorant Garamond",serif';
+        ctx.fillStyle = e.color+'cc';
+        ctx.fillText(s, x, y-12);
+      }
+    });
+  }
+
+  // ─── INIT ────────────────────────────────────────────────────
+  renderGraph();
+  renderLog();
+  window.addEventListener('resize', renderGraph);
+</script>
+</body>
+</html>
